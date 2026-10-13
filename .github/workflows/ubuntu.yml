@@ -1,56 +1,74 @@
-name: Ubuntu Desktop RDP & SSH
+name: Pure Ubuntu Desktop (GNOME) & SSH
 
 on:
   workflow_dispatch:
 
 jobs:
-  ubuntu-rdp-ssh:
+  ubuntu-gnome-rdp:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
 
     steps:
-      - name: Install Desktop Environment & XRDP
+      - name: Install Pure Ubuntu Desktop (GNOME) & XRDP
         run: |
           sudo apt-get update
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xrdp
+          # Menginstal seluruh paket asli Ubuntu Desktop. Ini akan memakan waktu cukup lama.
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y ubuntu-desktop xrdp
           
-          echo xfce4-session > ~/.xsession
+          # Konfigurasi agar XRDP memuat sesi GNOME/Ubuntu asli
+          cat <<EOF > ~/.xsession
+          export GNOME_SHELL_SESSION_MODE=ubuntu
+          export XDG_CURRENT_DESKTOP=ubuntu:GNOME
+          export XDG_DATA_DIRS=/usr/share/ubuntu:/usr/local/share:/usr/share:/var/lib/snapd/desktop
+          export XDG_CONFIG_DIRS=/etc/xdg/xdg-ubuntu:/etc/xdg
+          exec /usr/bin/gnome-session --session=ubuntu
+          EOF
+          
           sudo cp ~/.xsession /etc/skel/
+          sudo chmod +x ~/.xsession
+          
+          # Mengatasi bug "Color Profile" pop-up yang sering muncul di Ubuntu GNOME saat via RDP
+          sudo bash -c "cat > /etc/polkit-1/localauthority/50-local.d/45-allow-colord.pkla" <<EOF
+          [Allow Colord all Users]
+          Identity=unix-user:*
+          Action=org.freedesktop.color-manager.create-device;org.freedesktop.color-manager.create-profile;org.freedesktop.color-manager.delete-device;org.freedesktop.color-manager.delete-profile;org.freedesktop.color-manager.modify-device;org.freedesktop.color-manager.modify-profile
+          ResultAny=no
+          ResultInactive=no
+          ResultActive=yes
+          EOF
           
           sudo adduser xrdp ssl-cert
           sudo systemctl restart xrdp
 
       - name: Enable SSH Password Authentication
         run: |
-          # Memaksa SSH server untuk menerima login menggunakan password
           sudo bash -c 'echo "PasswordAuthentication yes" > /etc/ssh/sshd_config.d/99-allow-pass.conf'
           sudo bash -c 'echo "KbdInteractiveAuthentication yes" >> /etc/ssh/sshd_config.d/99-allow-pass.conf'
           sudo systemctl restart ssh
 
       - name: Set User Password
         run: |
-          # Mengubah password menggunakan rahasia dari GitHub Secrets
           echo "runner:${{ secrets.RDP_PASSWORD }}" | sudo chpasswd
           sudo usermod -aG sudo runner
 
       - name: Install & Setup Tailscale
         run: |
           curl -fsSL https://tailscale.com/install.sh | sh
-          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-$GITHUB_RUN_ID
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-gnome-$GITHUB_RUN_ID
 
       - name: Maintain Connection & Show Output
         run: |
           TS_IP=$(tailscale ip -4)
           
-          echo -e "\n======================="
-          echo "=== UBUNTU READY ==="
-          echo "======================="
+          echo -e "\n================================="
+          echo "=== PURE UBUNTU (GNOME) READY ==="
+          echo "================================="
           echo "IP Address : $TS_IP"
           echo "Username   : runner"
           echo "Password   : (Gunakan password dari secret RDP_PASSWORD Anda)"
-          echo "=======================\n"
+          echo "=================================\n"
           
           while true; do
-            echo "[$(date)] Mesin Ubuntu Aktif..."
+            echo "[$(date)] Mesin Ubuntu GNOME Aktif..."
             sleep 300
           done

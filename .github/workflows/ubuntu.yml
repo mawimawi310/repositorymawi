@@ -1,0 +1,56 @@
+name: Ubuntu Desktop RDP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  ubuntu-rdp:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
+    steps:
+      - name: Install Desktop Environment & XRDP
+        run: |
+          sudo apt-get update
+          # Instal XFCE4 (ringan) dan XRDP tanpa interaksi prompt
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xrdp
+          
+          # Konfigurasi agar XRDP menggunakan XFCE4
+          echo xfce4-session > ~/.xsession
+          sudo cp ~/.xsession /etc/skel/
+          
+          # Berikan akses sertifikat ke XRDP
+          sudo adduser xrdp ssl-cert
+          sudo systemctl restart xrdp
+
+      - name: Set User Password
+        run: |
+          # Mengubah password menggunakan rahasia dari GitHub Secrets
+          echo "runner:${{ secrets.RDP_PASSWORD }}" | sudo chpasswd
+          sudo usermod -aG sudo runner
+
+      - name: Install & Setup Tailscale
+        run: |
+          # Instal Tailscale
+          curl -fsSL https://tailscale.com/install.sh | sh
+          
+          # Autentikasi Tailscale
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-$GITHUB_RUN_ID
+
+      - name: Maintain Connection & Show Output
+        run: |
+          TS_IP=$(tailscale ip -4)
+          
+          echo -e "\n======================="
+          echo "=== UBUNTU RDP READY ==="
+          echo "======================="
+          echo "IP Address : $TS_IP"
+          echo "Username   : runner"
+          echo "Password   : (Gunakan password dari secret RDP_PASSWORD Anda)"
+          echo "=======================\n"
+          
+          # Looping untuk menahan mesin virtual agar tidak mati
+          while true; do
+            echo "[$(date)] Mesin Ubuntu RDP Aktif..."
+            sleep 300
+          done

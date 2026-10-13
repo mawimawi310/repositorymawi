@@ -1,10 +1,10 @@
-name: Ubuntu Desktop RDP
+name: Ubuntu Desktop RDP & SSH
 
 on:
   workflow_dispatch:
 
 jobs:
-  ubuntu-rdp:
+  ubuntu-rdp-ssh:
     runs-on: ubuntu-22.04
     timeout-minutes: 360
 
@@ -12,16 +12,20 @@ jobs:
       - name: Install Desktop Environment & XRDP
         run: |
           sudo apt-get update
-          # Instal XFCE4 (ringan) dan XRDP tanpa interaksi prompt
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies xrdp
           
-          # Konfigurasi agar XRDP menggunakan XFCE4
           echo xfce4-session > ~/.xsession
           sudo cp ~/.xsession /etc/skel/
           
-          # Berikan akses sertifikat ke XRDP
           sudo adduser xrdp ssl-cert
           sudo systemctl restart xrdp
+
+      - name: Enable SSH Password Authentication
+        run: |
+          # Memaksa SSH server untuk menerima login menggunakan password
+          sudo bash -c 'echo "PasswordAuthentication yes" > /etc/ssh/sshd_config.d/99-allow-pass.conf'
+          sudo bash -c 'echo "KbdInteractiveAuthentication yes" >> /etc/ssh/sshd_config.d/99-allow-pass.conf'
+          sudo systemctl restart ssh
 
       - name: Set User Password
         run: |
@@ -31,10 +35,7 @@ jobs:
 
       - name: Install & Setup Tailscale
         run: |
-          # Instal Tailscale
           curl -fsSL https://tailscale.com/install.sh | sh
-          
-          # Autentikasi Tailscale
           sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-ubuntu-$GITHUB_RUN_ID
 
       - name: Maintain Connection & Show Output
@@ -42,15 +43,14 @@ jobs:
           TS_IP=$(tailscale ip -4)
           
           echo -e "\n======================="
-          echo "=== UBUNTU RDP READY ==="
+          echo "=== UBUNTU READY ==="
           echo "======================="
           echo "IP Address : $TS_IP"
           echo "Username   : runner"
           echo "Password   : (Gunakan password dari secret RDP_PASSWORD Anda)"
           echo "=======================\n"
           
-          # Looping untuk menahan mesin virtual agar tidak mati
           while true; do
-            echo "[$(date)] Mesin Ubuntu RDP Aktif..."
+            echo "[$(date)] Mesin Ubuntu Aktif..."
             sleep 300
           done
